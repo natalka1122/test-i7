@@ -9,3 +9,8 @@ chmod +x main.sh
 After script execution passwords, diagnostics and check commands will be printed
 
 Created by natalka1122
+
+TODO list 
+- To be able to run the script several times (where should I store passwords?)
+- Create letsencrypt certificate using sslip.io service
+- Work with environment variables instead of hardcode
