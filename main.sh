@@ -46,7 +46,7 @@ curl https://repo.powerdns.com/CBC8B383-pub.asc | sudo apt-key add -
 ### Packet install
 sudo apt update
 sudo apt-get --yes upgrade
-sudo apt-get --yes install net-tools pwgen php-fpm nginx mariadb-server pdns-server pdns-backend-mysql
+sudo apt-get --yes install net-tools pwgen php-fpm nginx mariadb-server pdns-server pdns-backend-mysql dnsutils
 ### Password generation
 MARIADB_ROOT_PASSWORD=$(pwgen -s -1 14)
 MARIADB_PDNS_PASSWORD=$(pwgen -s -1 14)
@@ -140,7 +140,6 @@ sudo systemctl restart nginx
 ### Add sample data with API
 curl -k -X POST --data '{"name":"'${SAMPLE_ZONE}'.", "kind": "Master", "masters": [], "nameservers" : ["ns1."]}' -v -H 'X-API-Key: '${PDNS_API_PASSWORD} http://127.0.0.1:${PDNS_API_PORT}/api/v1/servers/localhost/zones
 ### Log file diag
-sudo apt --yes install dnsutils
 echo \#netstat -tupln >> $LOG_FILE
 sudo netstat -tupln >> $LOG_FILE
 echo Check mysql database for sample data >> $LOG_FILE
