@@ -143,9 +143,9 @@ curl -k -X POST --data '{"name":"'${SAMPLE_ZONE}'.", "kind": "Master", "masters"
 echo \#netstat -tupln >> $LOG_FILE
 sudo netstat -tupln >> $LOG_FILE
 echo Check mysql database for sample data >> $LOG_FILE
-echo $(mysql -u ${MARIADB_PDNS_USERNAME} -p${MARIADB_PDNS_PASSWORD} -e "select * from ${MARIADB_PDNS_DBNAME}.domains where name='${SAMPLE_ZONE}';") >>$LOG_FILE
+mysql -u ${MARIADB_PDNS_USERNAME} -p${MARIADB_PDNS_PASSWORD} -e "select * from ${MARIADB_PDNS_DBNAME}.domains where name='${SAMPLE_ZONE}';" >>$LOG_FILE
 echo Check dns with dig >> $LOG_FILE
-echo $(dig -t SOA example.com @${EXTERNAL_IP}) >> $LOG_FILE
+dig -t SOA example.com @${EXTERNAL_IP} >> $LOG_FILE
 echo External API check should work only from this IP range: ${IP_RANGE} >> $LOG_FILE
 echo curl -v -H \'X-API-Key: ${PDNS_API_PASSWORD}\' https://${EXTERNAL_IP}/api/v1/servers/localhost >> $LOG_FILE
 echo Phpinfo link: http://${EXTERNAL_IP}:${PHPINFO_PORT} >> $LOG_FILE
