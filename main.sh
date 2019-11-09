@@ -1,34 +1,30 @@
 #!/usr/bin/env bash
-set -e
+set -xe
+
+### Change me if you like
+IP_RANGE=91.226.31.0/24
+SERVER_NAME=www.natalka1122.com
+PHPINFO_PORT=80
+SAMPLE_ZONE=example.com
+
+### Init variables
 LOG_FILE=$HOME/deploy.log
 MARIADB_PDNS_DBNAME=pdns
 MARIADB_PDNS_USERNAME=pdns
-IP_RANGE=91.226.31.0/24
-SERVER_NAME=www.natalka1122.com
 SSL_CERT_DIR=/etc/nginx/$SERVER_NAME
 PDNS_API_PORT=8081
-PHPINFO_PORT=80 ## One should open corresponding port on the firewall
 PHPINFO_DIR=/var/www/html
 TMP_DIR=/tmp
+EXTERNAL_IP=$(curl ifconfig.co)
 
+### Create init dir if necessary
 sudo mkdir -p $PHPINFO_DIR
 sudo mkdir -p $TMP_DIR
 sudo mkdir -p $SSL_CERT_DIR
-echo ========== TASK 1/10 Update the system ==========
-sudo apt update
-sudo apt-get --yes upgrade
-sudo apt-get --yes install net-tools pwgen
-
-MARIADB_ROOT_PASSWORD=$(pwgen -s -1 14)
-MARIADB_PDNS_PASSWORD=$(pwgen -s -1 14)
-PDNS_API_PASSWORD=$(pwgen -s -1 14)
+### Log file init
 cp /etc/issue $LOG_FILE
-echo Date script executed: $(date) >> $LOG_FILE
-echo MariaDB password for root user: $MARIADB_ROOT_PASSWORD >>$LOG_FILE
-echo PowerDNS user name: $MARIADB_PDNS_USERNAME >>$LOG_FILE
-echo PowerDNS user password: $MARIADB_PDNS_PASSWORD >>$LOG_FILE
-echo PowerDNS API password: $PDNS_API_PASSWORD >>$LOG_FILE
-echo ========== TASK 2/10 Install MariaDB ==========
+echo Script started at: $(date) >> $LOG_FILE
+### MariaDB add source
 sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 0xF1656F24C74CD1D8
 cat <<EOF >${TMP_DIR}/mariabd.list
 # MariaDB 10.4 repository list - created 2019-11-07 16:57 UTC
@@ -37,10 +33,7 @@ deb [arch=amd64] http://mirror.timeweb.ru/mariadb/repo/10.4/debian buster main
 deb-src http://mirror.timeweb.ru/mariadb/repo/10.4/debian buster main
 EOF
 sudo mv ${TMP_DIR}/mariabd.list /etc/apt/sources.list.d/
-sudo apt update
-sudo apt install --yes mariadb-server
-sudo mysqladmin -u root password $MARIADB_ROOT_PASSWORD
-echo ========== TASK 3/10 Install PowerDNS ==========
+### PowerDNS add source
 echo "deb [arch=amd64] http://repo.powerdns.com/debian buster-auth-master main" >${TMP_DIR}/powerdns.list
 sudo mv ${TMP_DIR}/powerdns.list /etc/apt/sources.list.d/
 cat <<EOF >${TMP_DIR}/pdns
@@ -50,8 +43,22 @@ Pin-Priority: 600
 EOF
 sudo mv ${TMP_DIR}/pdns /etc/apt/preferences.d/
 curl https://repo.powerdns.com/CBC8B383-pub.asc | sudo apt-key add -
-sudo apt-get update
-sudo apt-get --yes install pdns-server pdns-backend-mysql
+### Packet install
+sudo apt update
+sudo apt-get --yes upgrade
+sudo apt-get --yes install net-tools pwgen php-fpm nginx mariadb-server pdns-server pdns-backend-mysql
+### Password generation
+MARIADB_ROOT_PASSWORD=$(pwgen -s -1 14)
+MARIADB_PDNS_PASSWORD=$(pwgen -s -1 14)
+PDNS_API_PASSWORD=$(pwgen -s -1 14)
+### Fill in the log file
+echo MariaDB password for root user: $MARIADB_ROOT_PASSWORD >> $LOG_FILE
+echo PowerDNS user name: $MARIADB_PDNS_USERNAME >> $LOG_FILE
+echo PowerDNS user password: $MARIADB_PDNS_PASSWORD >> $LOG_FILE
+echo PowerDNS API password: $PDNS_API_PASSWORD >> $LOG_FILE
+### Set mysql password
+sudo mysqladmin -u root password $MARIADB_ROOT_PASSWORD
+### Specify PowerDNS backend
 sudo sed 's/^launch=$/launch=gmysql/g' /etc/powerdns/pdns.conf >${TMP_DIR}/pdns.conf.template
 cat <<EOF >>${TMP_DIR}/pdns.conf.template
 gmysql-host=127.0.0.1
@@ -62,6 +69,7 @@ api=yes
 api-key=${PDNS_API_PASSWORD}
 EOF
 sudo mv ${TMP_DIR}/pdns.conf.template /etc/powerdns/pdns.conf
+### Init PowerDNS database
 cat <<EOF >${TMP_DIR}/powerdns-init.sql
 CREATE DATABASE ${MARIADB_PDNS_DBNAME};
 CREATE USER '${MARIADB_PDNS_USERNAME}'@'localhost' IDENTIFIED BY '${MARIADB_PDNS_PASSWORD}';
@@ -70,15 +78,9 @@ USE ${MARIADB_PDNS_DBNAME};
 EOF
 curl https://raw.githubusercontent.com/PowerDNS/pdns/rel/auth-4.2.x/modules/gmysqlbackend/schema.mysql.sql >>${TMP_DIR}/powerdns-init.sql
 mysql -u root -p$MARIADB_ROOT_PASSWORD < ${TMP_DIR}/powerdns-init.sql
-echo ========== TASK 4/10 Install PowerDNS API ==========
-echo Done early
-echo ========== TASK 5/10 Check PowerDNS API ==========
-sudo systemctl restart pdns
-curl -k -v -H 'X-API-Key: ${PDNS_API_PASSWORD}' http://127.0.0.1:8081/api/v1/servers/localhost >>$LOG_FILE
-echo ========== TASK 6/10 Install nginx ==========
-sudo apt-get --yes install nginx
-echo ====PROGRESS====== TASK 7/10 Proxy PowerDNS via nginx ==========
+### Nginx certificate
 sudo openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 -subj "/C=US/ST=Denial/L=Springfield/O=Dis/CN=${SERVER_NAME}"  -keyout ${SSL_CERT_DIR}/cert.key -out ${SSL_CERT_DIR}/cert.crt
+### Nginx proxy and acl setup
 cat <<EOF >${TMP_DIR}/nginx-ssl.conf
 server {
     listen 443;
@@ -106,13 +108,7 @@ server {
 EOF
 sudo cp ${TMP_DIR}/nginx-ssl.conf /etc/nginx/sites-available
 sudo ln -s /etc/nginx/sites-available/nginx-ssl.conf /etc/nginx/sites-enabled/
-sudo systemctl restart nginx
-echo ========== TASK 8/10 Check API access from Internet ==========
-echo ========== TASK 9/10 Limit allowed IP addresses ==========
-echo ========== TASK 10/10 Check API access from Internet ==========
-echo ========== TASK 11/10 Install php-fpm ==========
-sudo apt --yes install php-fpm
-echo ========== TASK 12/10 Create phpinfo\(\)\; site ==========
+### Nginx phpinfo website
 sudo echo "<?php phpinfo(); ?>" > ${TMP_DIR}/index.php
 sudo mv ${TMP_DIR}/index.php $PHPINFO_DIR
 cat <<EOF >${TMP_DIR}/nginx-phpinfo.conf
@@ -138,4 +134,23 @@ if [ $PHPINFO_PORT -eq 80 ]
 then
     sudo rm /etc/nginx/sites-enabled/default
 fi
+### Services restart
+sudo systemctl restart pdns
 sudo systemctl restart nginx
+### Add sample data with API
+curl -k -X POST --data '{"name":"'${SAMPLE_ZONE}'.", "kind": "Master", "masters": [], "nameservers" : ["ns1."]}' -v -H 'X-API-Key: '${PDNS_API_PASSWORD} http://127.0.0.1:${PDNS_API_PORT}/api/v1/servers/localhost/zones
+### Log file diag
+sudo apt --yes install dnsutils
+echo \#netstat -tupln >> $LOG_FILE
+sudo netstat -tupln >> $LOG_FILE
+echo Check mysql database for sample data >> $LOG_FILE
+echo $(mysql -u ${MARIADB_PDNS_USERNAME} -p${MARIADB_PDNS_PASSWORD} -e "select * from ${MARIADB_PDNS_DBNAME}.domains where name='${SAMPLE_ZONE}';") >>$LOG_FILE
+echo Check dns with dig >> $LOG_FILE
+echo $(dig -t SOA example.com @${EXTERNAL_IP}) >> $LOG_FILE
+echo External API check should work only from this IP range: ${IP_RANGE} >> $LOG_FILE
+echo curl -v -H \'X-API-Key: ${PDNS_API_PASSWORD}\' https://${EXTERNAL_IP}/api/v1/servers/localhost >> $LOG_FILE
+echo Phpinfo link: http://${EXTERNAL_IP}:${PHPINFO_PORT} >> $LOG_FILE
+echo Script finished at: $(date) >> $LOG_FILE
+echo
+echo ========== Everything seems fine ==========
+cat $LOG_FILE
