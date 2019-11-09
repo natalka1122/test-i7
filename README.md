@@ -6,6 +6,6 @@ curl https://raw.githubusercontent.com/natalka1122/test-i7/master/main.sh -o mai
 chmod +x main.sh
 ./main.sh
 ```
-After script execution, passwords, diagnostics and check commands will be printed
+After script execution passwords, diagnostics and check commands will be printed
 
 Created by natalka1122
